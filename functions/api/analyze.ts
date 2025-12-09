@@ -18,10 +18,10 @@ interface ShoeRecommendation {
 export async function onRequestPost(context: any) {
     try {
         const { request, env } = context;
-        const { image } = await request.json() as { image: string };
+        const input = await request.json() as { image?: string; colors?: string[] };
 
-        if (!image) {
-            return new Response(JSON.stringify({ error: "Image data required" }), { status: 400 });
+        if (!input.image && (!input.colors || input.colors.length === 0)) {
+            return new Response(JSON.stringify({ error: "Image data or colors required" }), { status: 400 });
         }
 
         if (!env.GEMINI_API_KEY) {
@@ -29,12 +29,15 @@ export async function onRequestPost(context: any) {
         }
 
         const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        let analysis: OutfitAnalysis;
 
-        // 1. Analyze Outfit
-        const result = await model.generateContent([
-            {
-                text: `You are a fashion style analyst. Analyze the outfit in the image and provide a structured JSON response. Identify clothing items, colors, style category, and occasion. Be specific about colors and items visible.
+        if (input.image) {
+            const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+            // 1. Analyze Outfit
+            const result = await model.generateContent([
+                {
+                    text: `You are a fashion style analyst. Analyze the outfit in the image and provide a structured JSON response. Identify clothing items, colors, style category, and occasion. Be specific about colors and items visible.
 
 Respond with ONLY valid JSON in this exact format:
 {
@@ -50,21 +53,31 @@ Respond with ONLY valid JSON in this exact format:
 
 Keep detectedItems to 3-5 items max. Keep colorPalette to 3-4 colors max.
 Analyze this outfit image and identify the clothing items, colors, style, and occasion.`,
-            },
-            {
-                inlineData: {
-                    mimeType: "image/jpeg",
-                    data: image,
                 },
-            },
-        ]);
+                {
+                    inlineData: {
+                        mimeType: "image/jpeg",
+                        data: input.image,
+                    },
+                },
+            ]);
 
-        const text = result.response.text();
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
-            throw new Error("Failed to parse AI response");
+            const text = result.response.text();
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) {
+                throw new Error("Failed to parse AI response");
+            }
+            analysis = JSON.parse(jsonMatch[0]) as OutfitAnalysis;
+        } else {
+            // Manual color selection fallback
+            analysis = {
+                detectedItems: ["User Color Selection"],
+                dominantColors: input.colors!,
+                style: "casual",
+                occasion: "everyday",
+                colorPalette: input.colors!.map(c => ({ color: c, hex: "#000000" }))
+            };
         }
-        const analysis = JSON.parse(jsonMatch[0]) as OutfitAnalysis;
 
         // 2. Calculate Recommendation
         const scoredShoes = neemansShoes.map(shoe => ({
