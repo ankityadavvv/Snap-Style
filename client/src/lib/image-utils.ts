@@ -3,8 +3,15 @@
 export async function extractColors(imageSrc: string): Promise<string[]> {
     return new Promise((resolve, reject) => {
         const img = new Image();
-        img.crossOrigin = "Anonymous";
-        img.src = imageSrc;
+        // Remove crossOrigin for data URIs to prevent Tainted Canvas issues in some contexts
+        // img.crossOrigin = "Anonymous"; 
+
+        // Check if it's a raw base64 string and add prefix if needed
+        if (!imageSrc.startsWith("http") && !imageSrc.startsWith("data:")) {
+            img.src = `data:image/jpeg;base64,${imageSrc}`;
+        } else {
+            img.src = imageSrc;
+        }
 
         img.onload = () => {
             const canvas = document.createElement("canvas");
@@ -50,12 +57,9 @@ export async function extractColors(imageSrc: string): Promise<string[]> {
                 .slice(0, 3)
                 .map(([key]) => {
                     const [r, g, b] = key.split(",");
+                    // Ensure valid hex format
                     return `#${((1 << 24) + (+r << 16) + (+g << 8) + +b).toString(16).slice(1)}`;
                 });
-
-            // Map common colors to readable names for better matching if possible, 
-            // but for now we'll just return hex codes. 
-            // The backend 'calculateMatchScore' logic handles basic color matching.
 
             resolve(sortedColors.length > 0 ? sortedColors : ["#000000"]);
         };
