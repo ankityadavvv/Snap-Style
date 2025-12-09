@@ -44,8 +44,20 @@ export default function Home() {
     },
   });
 
-  const handleImageSelected = (base64Image: string) => {
-    analyzeMutation.mutate({ image: base64Image });
+  const handleImageSelected = async (base64Image: string) => {
+    try {
+      setViewState("analyzing");
+      const { extractColors } = await import("@/lib/image-utils");
+      const colors = await extractColors(base64Image);
+      analyzeMutation.mutate({ colors });
+    } catch (error) {
+      toast({
+        title: "Image Processing Failed",
+        description: "Could not extract colors from the image. Please try again or pick colors manually.",
+        variant: "destructive",
+      });
+      setViewState("upload");
+    }
   };
 
   const handleColorToggle = (color: string) => {
@@ -67,9 +79,9 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header 
-        onReset={handleReset} 
-        showBackButton={viewState === "results" || viewState === "color-picker"} 
+      <Header
+        onReset={handleReset}
+        showBackButton={viewState === "results" || viewState === "color-picker"}
       />
 
       <main className="max-w-md mx-auto px-4 py-6 pb-28">
